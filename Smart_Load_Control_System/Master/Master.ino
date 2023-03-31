@@ -1,17 +1,21 @@
 //ESP8266 V2.5.2 
 
-#include <Arduino.h>
-#ifdef ESP32
-  #include <WiFi.h>
-  #include <AsyncTCP.h>
-#else
-  #include <ESP8266WiFi.h>
-  #include <ESPAsyncTCP.h>
-#endif
+#include <ESP8266WiFi.h>
+#include <ESPAsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h> //Version 1.1.2
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h> //Version 1.4.6
 
+const uint8_t chipEn = 15;
+const uint8_t chipSel = 5;
+const byte addr1[][6] = {"01310","10040"};
+const byte addr2[][6] = {"05210","13120"};
+RF24 nrf24(chipEn,chipSel);
+LiquidCrystal_I2C lcd(0x27,20,4);
 AsyncWebServer server(80);
-
 namespace Room
 {
   const char* room1 = "room1";
@@ -42,14 +46,32 @@ void notFound(AsyncWebServerRequest *request)
 void setup() 
 {
   Serial.begin(115200);
-  Serial.print("Setting AP (Access Point)…");
+  
   const char* ssid = "Load_Manager";
   const char* password = "Load_Manager";
   WiFi.softAP(ssid, password);
+  IPAddress IP = WiFi.softAPIP();    
+  
+  //Startup message
+  lcd.init();
+  lcd.backlight();
+  lcd.print("SMART LOAD MANAGER");
+  lcd.setCursor(0,1);
+  for(uint8_t i = 0; i < 20; i++)
+  {
+    lcd.print('*');
+  }
+  delay(1500);
+  lcd.setCursor(0,2);
+  lcd.print("STATUS: ");
+  lcd.setCursor(0,3);
+  lcd.print("INITIALIZING...");
+  delay(1500);
+  lcd.clear();
 
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
+  lcd.setCursor(0,3);
+  lcd.print(">IP:");
+  lcd.print(IP);
   
   // Send web page with input fields to client
   server.on("/",HTTP_GET,[](AsyncWebServerRequest *request)
