@@ -1,2 +1,0 @@
-Master:
-1. LCD (SCL:D1, SDA:D2)

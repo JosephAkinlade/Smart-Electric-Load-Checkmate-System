@@ -1,47 +1,62 @@
-//ESP8266 V2.5.2 
-
-#include <ESP8266WiFi.h>
-#include <ESPAsyncTCP.h>
+//ESP8266 V2.5.2
+#include <Arduino.h>
+#ifdef ESP32
+  #include <WiFi.h>
+  #include <AsyncTCP.h>
+#else
+  #include <ESP8266WiFi.h>
+  #include <ESPAsyncTCP.h>
+#endif
 #include <ESPAsyncWebServer.h>
+
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h> //Version 1.1.2
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h> //Version 1.4.6
 
-const uint8_t chipEn = 15;
-const uint8_t chipSel = 5;
-const byte addr1[][6] = {"01310","10040"};
-const byte addr2[][6] = {"05210","13120"};
-RF24 nrf24(chipEn,chipSel);
-LiquidCrystal_I2C lcd(0x27,20,4);
-AsyncWebServer server(80);
+typedef struct
+{
+  float currentLimit;
+  bool restoreCmd;
+}masterToNode_t;
+
+const uint8_t chipEn = 15; 
+const uint8_t chipSel = 2;
+const byte roomTxPipe[][6] = {"rm1Tx","rm2Tx"};
+const byte roomRxPipe[][6] = {"rm1Rx","rm2Rx"};
 namespace Room
 {
   const char* room1 = "room1";
   const char* room2 = "room2";  
 };
 
+const uint8_t numOfNodes = 2;
+static masterToNode_t masterToNode[numOfNodes];
+RF24 nrf24(chipEn,chipSel);
+LiquidCrystal_I2C lcd(0x27,20,4);
+AsyncWebServer server(80);
+
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html><head>
-  <title>ESP Input Form</title>
+  <title>Load Manager</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   </head><body>
   <form action="/get">
-    room1: <input type="text" name="room1">
+    Room1: <input type="text" name="room1">
     <input type="submit" value="Submit">
   </form><br>
   <form action="/get">
-    room2: <input type="text" name="room2">
+    Room2: <input type="text" name="room2">
     <input type="submit" value="Submit">
   </form><br>
-  </form>
+  <form action="/restore1">
+    <button type="submit">Restore room1</button>
+  </form><br>
+  <form action="/restore2">
+    <button type="submit">Restore room2</button>
+  </form>  
 </body></html>)rawliteral";
-
-void notFound(AsyncWebServerRequest *request) 
-{
-  request->send(404,"text/plain","Not found");
-}
 
 void setup() 
 {
@@ -49,8 +64,12 @@ void setup()
   
   const char* ssid = "Load_Manager";
   const char* password = "Load_Manager";
-  WiFi.softAP(ssid, password);
+  WiFi.softAP(ssid,password);
   IPAddress IP = WiFi.softAPIP();    
+
+  nrf24.begin();
+  nrf24.setPALevel(RF24_PA_MAX);  
+  nrf24.startListening();
   
   //Startup message
   lcd.init();
@@ -65,7 +84,7 @@ void setup()
   lcd.setCursor(0,2);
   lcd.print("STATUS: ");
   lcd.setCursor(0,3);
-  lcd.print("INITIALIZING...");
+  lcd.print("BOOTING.......");
   delay(1500);
   lcd.clear();
 
@@ -73,12 +92,12 @@ void setup()
   lcd.print(">IP:");
   lcd.print(IP);
   
-  // Send web page with input fields to client
+  //Send web page with input fields to client
   server.on("/",HTTP_GET,[](AsyncWebServerRequest *request)
   {
     request->send_P(200,"text/html",index_html);
   });
-
+  //Handle configuration of current limits from the user 
   server.on("/get",HTTP_GET,[](AsyncWebServerRequest *request) 
   {
     String inputMessage;
@@ -87,11 +106,21 @@ void setup()
     {
       inputMessage = request->getParam(Room::room1)->value();
       inputParam = Room::room1;
+      nrf24.stopListening();
+      nrf24.openWritingPipe(roomTxPipe[0]);
+      masterToNode[0].currentLimit = inputMessage.toFloat();
+      nrf24.write(&masterToNode[0],sizeof(masterToNode[0]));
+      nrf24.startListening();
     }
     else if(request->hasParam(Room::room2)) 
     {
       inputMessage = request->getParam(Room::room2)->value();
       inputParam = Room::room2;
+      nrf24.stopListening();
+      nrf24.openWritingPipe(roomTxPipe[1]);
+      masterToNode[1].currentLimit = inputMessage.toFloat();
+      nrf24.write(&masterToNode[1],sizeof(masterToNode[1]));
+      nrf24.startListening();
     }
     else 
     {
@@ -104,10 +133,44 @@ void setup()
                   " has been sent to the system." +
                   "<br><a href=\"/\">Return to Home Page</a>");
   });
-  server.onNotFound(notFound);
+  //Handling the restoration of power to the rooms
+  server.on("/restore1",HTTP_GET,[](AsyncWebServerRequest *request)
+  {
+    Serial.println("Room1 restored");
+    nrf24.stopListening();
+    nrf24.openWritingPipe(roomTxPipe[0]);
+    masterToNode[0].restoreCmd = true;
+    nrf24.write(&masterToNode[0],sizeof(masterToNode[0]));
+    masterToNode[0].restoreCmd = false; 
+    nrf24.startListening();
+    request->send_P(200,"text/html","Room1 restored <br><a href=\"/\">Return to Home Page</a>");
+  });
+  server.on("/restore2",HTTP_GET,[](AsyncWebServerRequest *request)
+  {
+    Serial.println("Room2 restored");
+    nrf24.stopListening();
+    nrf24.openWritingPipe(roomTxPipe[1]);
+    masterToNode[1].restoreCmd = true;
+    nrf24.write(&masterToNode[1],sizeof(masterToNode[1]));
+    masterToNode[1].restoreCmd = false; 
+    nrf24.startListening();    
+    request->send_P(200,"text/html","Room2 restored <br><a href=\"/\">Return to Home Page</a>");
+  });
+    
   server.begin();
 }
 
 void loop() 
-{  
+{
+  for(uint8_t i = 0; i < numOfNodes; i++)
+  {
+    nrf24.openReadingPipe(1,roomRxPipe[i]);
+    if(nrf24.available())
+    {
+      Serial.print("received: ");
+      char c;
+      nrf24.read(&c,sizeof(c));
+      Serial.println(c);
+    }
+  }
 }

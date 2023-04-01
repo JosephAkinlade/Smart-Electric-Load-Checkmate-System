@@ -1,0 +1,7 @@
+Master (ESP8266):
+1. LCD (SCL:5, SDA:4)
+2. NRF24L01 (CSN:2 CE:15 MOSI:13 SCK:14 MISO:12)
+
+Node (Arduino Nano):
+1. NRF24L01 (CSN:9 CE:8 MOSI:11 SCK: MISO:12 SCK:13)
+2. Relay (5)
