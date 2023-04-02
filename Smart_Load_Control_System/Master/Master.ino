@@ -8,7 +8,6 @@
   #include <ESPAsyncTCP.h>
 #endif
 #include <ESPAsyncWebServer.h>
-
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h> //Version 1.1.2
 #include <SPI.h>
@@ -17,24 +16,29 @@
 
 typedef struct
 {
-  float currentLimit;
+  float currentLimit;  
   bool restoreCmd;
 }masterToNode_t;
+
+typedef struct
+{
+  char id;
+  bool overcurrentState;
+}nodeToMaster_t;
 
 const uint8_t chipEn = 15; 
 const uint8_t chipSel = 2;
 const byte roomTxPipe[][6] = {"rm1Tx","rm2Tx"};
-const byte roomRxPipe[][6] = {"rm1Rx","rm2Rx"};
+const byte roomRxPipe[][6] = {"rm1Rx","rm1Rx"};
 namespace Room
 {
+  const uint8_t numOfRooms = 2;
   const char* room1 = "room1";
   const char* room2 = "room2";  
 };
 
-const uint8_t numOfNodes = 2;
-static masterToNode_t masterToNode[numOfNodes];
 RF24 nrf24(chipEn,chipSel);
-LiquidCrystal_I2C lcd(0x27,20,4);
+//LiquidCrystal_I2C lcd(0x27,20,4);
 AsyncWebServer server(80);
 
 const char index_html[] PROGMEM = R"rawliteral(
@@ -66,32 +70,35 @@ void setup()
   const char* password = "Load_Manager";
   WiFi.softAP(ssid,password);
   IPAddress IP = WiFi.softAPIP();    
-
+  Serial.print("IP address = ");
+  Serial.println(IP);
+  
   nrf24.begin();
   nrf24.setPALevel(RF24_PA_MAX);  
   nrf24.startListening();
   
   //Startup message
-  lcd.init();
-  lcd.backlight();
-  lcd.print("SMART LOAD MANAGER");
-  lcd.setCursor(0,1);
-  for(uint8_t i = 0; i < 20; i++)
-  {
-    lcd.print('*');
-  }
-  delay(1500);
-  lcd.setCursor(0,2);
-  lcd.print("STATUS: ");
-  lcd.setCursor(0,3);
-  lcd.print("BOOTING.......");
-  delay(1500);
-  lcd.clear();
+//  lcd.init();
+//  lcd.backlight();
+//  lcd.print("SMART LOAD MANAGER");
+//  lcd.setCursor(0,1);
+//  for(uint8_t i = 0; i < 20; i++)
+//  {
+//    lcd.print('*');
+//  }
+//  delay(1500);
+//  lcd.setCursor(0,2);
+//  lcd.print("STATUS: ");
+//  lcd.setCursor(0,3);
+//  lcd.print("BOOTING.......");
+//  delay(1500);
+//  lcd.clear();
+//
+//  lcd.setCursor(0,3);
+//  lcd.print(">IP:");
+//  lcd.print(IP);
 
-  lcd.setCursor(0,3);
-  lcd.print(">IP:");
-  lcd.print(IP);
-  
+  static masterToNode_t masterToNode[Room::numOfRooms];
   //Send web page with input fields to client
   server.on("/",HTTP_GET,[](AsyncWebServerRequest *request)
   {
@@ -109,7 +116,7 @@ void setup()
       nrf24.stopListening();
       nrf24.openWritingPipe(roomTxPipe[0]);
       masterToNode[0].currentLimit = inputMessage.toFloat();
-      nrf24.write(&masterToNode[0],sizeof(masterToNode[0]));
+      nrf24.write(&masterToNode[0],sizeof(masterToNode_t));
       nrf24.startListening();
     }
     else if(request->hasParam(Room::room2)) 
@@ -119,7 +126,7 @@ void setup()
       nrf24.stopListening();
       nrf24.openWritingPipe(roomTxPipe[1]);
       masterToNode[1].currentLimit = inputMessage.toFloat();
-      nrf24.write(&masterToNode[1],sizeof(masterToNode[1]));
+      nrf24.write(&masterToNode[1],sizeof(masterToNode_t));
       nrf24.startListening();
     }
     else 
@@ -127,7 +134,6 @@ void setup()
       inputMessage = "No message sent";
       inputParam = "none";
     }
-    Serial.println(inputMessage);
     request->send(200,"text/html","Current limit (A) for " 
                   + inputParam + " with value: " + inputMessage +
                   " has been sent to the system." +
@@ -136,22 +142,20 @@ void setup()
   //Handling the restoration of power to the rooms
   server.on("/restore1",HTTP_GET,[](AsyncWebServerRequest *request)
   {
-    Serial.println("Room1 restored");
     nrf24.stopListening();
     nrf24.openWritingPipe(roomTxPipe[0]);
     masterToNode[0].restoreCmd = true;
-    nrf24.write(&masterToNode[0],sizeof(masterToNode[0]));
+    nrf24.write(&masterToNode[0],sizeof(masterToNode_t));
     masterToNode[0].restoreCmd = false; 
     nrf24.startListening();
     request->send_P(200,"text/html","Room1 restored <br><a href=\"/\">Return to Home Page</a>");
   });
   server.on("/restore2",HTTP_GET,[](AsyncWebServerRequest *request)
   {
-    Serial.println("Room2 restored");
     nrf24.stopListening();
     nrf24.openWritingPipe(roomTxPipe[1]);
     masterToNode[1].restoreCmd = true;
-    nrf24.write(&masterToNode[1],sizeof(masterToNode[1]));
+    nrf24.write(&masterToNode[1],sizeof(masterToNode_t));
     masterToNode[1].restoreCmd = false; 
     nrf24.startListening();    
     request->send_P(200,"text/html","Room2 restored <br><a href=\"/\">Return to Home Page</a>");
@@ -162,15 +166,17 @@ void setup()
 
 void loop() 
 {
-  for(uint8_t i = 0; i < numOfNodes; i++)
+  static nodeToMaster_t nodeToMaster[Room::numOfRooms];
+  for(uint8_t i = 0; i < Room::numOfRooms; i++)
   {
     nrf24.openReadingPipe(1,roomRxPipe[i]);
     if(nrf24.available())
     {
-      Serial.print("received: ");
-      char c;
-      nrf24.read(&c,sizeof(c));
-      Serial.println(c);
+      nrf24.read(&nodeToMaster[i],sizeof(nodeToMaster_t));
+      Serial.print("node ID: ");
+      Serial.println(nodeToMaster[i].id);
+      Serial.print("node overcurrent state: ");
+      Serial.println(nodeToMaster[i].overcurrentState);
     }
   }
 }
