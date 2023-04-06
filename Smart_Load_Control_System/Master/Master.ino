@@ -34,7 +34,9 @@ namespace Room
 {
   const uint8_t numOfRooms = 2;
   const char* room1 = "room1";
-  const char* room2 = "room2";  
+  const char* room2 = "room2";
+  const uint8_t room1DispRow = 0;
+  const uint8_t room2DispRow = 1;  
 };
 
 RF24 nrf24(chipEn,chipSel);
@@ -61,6 +63,33 @@ const char index_html[] PROGMEM = R"rawliteral(
     <button type="submit">Restore room2</button>
   </form>  
 </body></html>)rawliteral";
+
+static void DisplayRoomStatus(uint8_t dispRow,char* state)
+{
+  uint8_t column = 8;
+  lcd.setCursor(column,dispRow);
+  //clear parts of row before displaying room's state
+  for(uint8_t i = column; i < 20; i++)
+  {
+    lcd.print(' ');
+  }
+  lcd.setCursor(column,dispRow);
+  lcd.print(state);
+}
+
+static void DisplayRoomStatus(nodeToMaster_t& nodeToMaster)
+{
+  char roomState[][9] = {"NORMAL","ABNORMAL"};
+  switch(nodeToMaster.id)
+  {
+    case '1':
+      DisplayRoomStatus(Room::room1DispRow,roomState[nodeToMaster.overcurrentState]);
+      break;
+    case '2':
+      DisplayRoomStatus(Room::room2DispRow,roomState[nodeToMaster.overcurrentState]);
+      break;
+  }
+}
 
 void setup() 
 {
@@ -101,6 +130,8 @@ void setup()
   lcd.setCursor(0,2);
   lcd.print(">IP:");
   lcd.print(IP);
+  DisplayRoomStatus(Room::room1DispRow,"NORMAL");
+  DisplayRoomStatus(Room::room2DispRow,"NORMAL");
   
   static masterToNode_t masterToNode[Room::numOfRooms];
   //Send web page with input fields to client
@@ -181,6 +212,7 @@ void loop()
       Serial.println(nodeToMaster[i].id);
       Serial.print("node overcurrent state: ");
       Serial.println(nodeToMaster[i].overcurrentState);
+      DisplayRoomStatus(nodeToMaster[i]);
     }
   }
 }
