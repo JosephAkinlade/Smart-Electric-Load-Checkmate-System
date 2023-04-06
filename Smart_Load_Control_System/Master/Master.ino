@@ -38,7 +38,7 @@ namespace Room
 };
 
 RF24 nrf24(chipEn,chipSel);
-//LiquidCrystal_I2C lcd(0x27,20,4);
+LiquidCrystal_I2C lcd(0x27,20,4);
 AsyncWebServer server(80);
 
 const char index_html[] PROGMEM = R"rawliteral(
@@ -78,26 +78,30 @@ void setup()
   nrf24.startListening();
   
   //Startup message
-//  lcd.init();
-//  lcd.backlight();
-//  lcd.print("SMART LOAD MANAGER");
-//  lcd.setCursor(0,1);
-//  for(uint8_t i = 0; i < 20; i++)
-//  {
-//    lcd.print('*');
-//  }
-//  delay(1500);
-//  lcd.setCursor(0,2);
-//  lcd.print("STATUS: ");
-//  lcd.setCursor(0,3);
-//  lcd.print("BOOTING.......");
-//  delay(1500);
-//  lcd.clear();
-//
-//  lcd.setCursor(0,3);
-//  lcd.print(">IP:");
-//  lcd.print(IP);
-
+  lcd.init();
+  lcd.backlight();
+  lcd.print("SMART LOAD MANAGER");
+  lcd.setCursor(0,1);
+  for(uint8_t i = 0; i < 20; i++)
+  {
+    lcd.print('*');
+  }
+  delay(1500);
+  lcd.setCursor(0,2);
+  lcd.print("STATUS: ");
+  lcd.setCursor(0,3);
+  lcd.print("BOOTING.......");
+  delay(1500);
+  lcd.clear();
+  
+  //Menu
+  lcd.print(">ROOM1:");
+  lcd.setCursor(0,1);
+  lcd.print(">ROOM2:");
+  lcd.setCursor(0,2);
+  lcd.print(">IP:");
+  lcd.print(IP);
+  
   static masterToNode_t masterToNode[Room::numOfRooms];
   //Send web page with input fields to client
   server.on("/",HTTP_GET,[](AsyncWebServerRequest *request)
