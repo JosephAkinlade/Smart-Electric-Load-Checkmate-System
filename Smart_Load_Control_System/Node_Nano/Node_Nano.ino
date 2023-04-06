@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h> //Version 1.4.6
+#include <EEPROM.h>
 
 typedef struct
 {
@@ -29,7 +30,6 @@ SoftwareSerial pzemSerial(pzemTx,pzemRx);
 PZEM004Tv30 pzem(pzemSerial);
 RF24 nrf24(chipEn,chipSel);
 uint32_t prevTime = millis();
-static masterToNode_t masterToNode;
 
 /**
  * @brief Set float to zero if it is not a number.
@@ -67,7 +67,9 @@ void setup()
 
 void loop() 
 {
+  static masterToNode_t masterToNode;
   static bool overcurrentPrevDetected;
+  static float currentLimitFromMem;
   //float measuredCurrent = pzem.current();
   float measuredCurrent = 10.2;
   SetToZeroIfNaN(&measuredCurrent);
@@ -75,13 +77,16 @@ void loop()
   if(nrf24.available())
   {
     nrf24.read(&masterToNode,sizeof(masterToNode_t));
+    SetToZeroIfNaN(&masterToNode.currentLimit);
+    EEPROM.put(0,masterToNode.currentLimit);
     Serial.print("Current limit = ");
     Serial.println(masterToNode.currentLimit);
     Serial.print("Restore cmd = ");
     Serial.println(masterToNode.restoreCmd);
   }
-  
-  bool overcurrentDetected = lround(measuredCurrent * 100) > lround(masterToNode.currentLimit * 100);
+
+  EEPROM.get(0,currentLimitFromMem);
+  bool overcurrentDetected = lround(measuredCurrent * 100) > lround(currentLimitFromMem * 100);
   
   if(overcurrentDetected && !overcurrentPrevDetected)
   {
