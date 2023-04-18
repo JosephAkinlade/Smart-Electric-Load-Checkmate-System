@@ -29,7 +29,8 @@ typedef struct
 const uint8_t chipEn = 15; 
 const uint8_t chipSel = 2;
 const byte roomTxPipe[][6] = {"rm1Tx","rm2Tx"};
-const byte roomRxPipe[][6] = {"rm1Rx","rm1Rx"};
+const byte roomRxPipe[][6] = {"rm1Rx","rm2Rx"};
+
 namespace Room
 {
   const uint8_t numOfRooms = 2;
@@ -37,6 +38,7 @@ namespace Room
   const char* room2 = "room2";
   const uint8_t room1DispRow = 0;
   const uint8_t room2DispRow = 1;  
+  const char state[][9] = {"NORMAL","ABNORMAL"};
 };
 
 RF24 nrf24(chipEn,chipSel);
@@ -64,7 +66,7 @@ const char index_html[] PROGMEM = R"rawliteral(
   </form>  
 </body></html>)rawliteral";
 
-static void DisplayRoomStatus(uint8_t dispRow,char* state)
+static void DisplayRoomStatus(uint8_t dispRow,const char* state)
 {
   uint8_t column = 8;
   lcd.setCursor(column,dispRow);
@@ -79,14 +81,13 @@ static void DisplayRoomStatus(uint8_t dispRow,char* state)
 
 static void DisplayRoomStatus(nodeToMaster_t& nodeToMaster)
 {
-  char roomState[][9] = {"NORMAL","ABNORMAL"};
   switch(nodeToMaster.id)
   {
     case '1':
-      DisplayRoomStatus(Room::room1DispRow,roomState[nodeToMaster.overcurrentState]);
+      DisplayRoomStatus(Room::room1DispRow,Room::state[nodeToMaster.overcurrentState]);
       break;
     case '2':
-      DisplayRoomStatus(Room::room2DispRow,roomState[nodeToMaster.overcurrentState]);
+      DisplayRoomStatus(Room::room2DispRow,Room::state[nodeToMaster.overcurrentState]);
       break;
   }
 }
@@ -130,8 +131,8 @@ void setup()
   lcd.setCursor(0,2);
   lcd.print(">IP:");
   lcd.print(IP);
-  DisplayRoomStatus(Room::room1DispRow,"NORMAL");
-  DisplayRoomStatus(Room::room2DispRow,"NORMAL");
+  DisplayRoomStatus(Room::room1DispRow,Room::state[0]);
+  DisplayRoomStatus(Room::room2DispRow,Room::state[0]);
   
   static masterToNode_t masterToNode[Room::numOfRooms];
   //Send web page with input fields to client
