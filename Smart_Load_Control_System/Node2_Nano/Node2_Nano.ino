@@ -17,14 +17,14 @@ typedef struct
   bool overcurrentState;
 }nodeToMaster_t;
 
-const char nodeID = '1';
+const char nodeID = '2';
 const uint8_t pzemTx = 4;
 const uint8_t pzemRx = 5;
 const uint8_t relayPin = 7;
 const uint8_t chipEn = 9; 
 const uint8_t chipSel = 10; 
-const byte room1RxPipe[] = "rm1Tx";
-const byte room1TxPipe[] = "rm1Rx";
+const byte room2RxPipe[] = "rm2Tx";
+const byte room2TxPipe[] = "rm2Rx";
 
 SoftwareSerial pzemSerial(pzemTx,pzemRx);
 PZEM004Tv30 pzem(pzemSerial);
@@ -49,7 +49,7 @@ static void SendDataToMaster(RF24& nrf24,char id,bool overcurrentState)
 {
   nodeToMaster_t nodeToMaster = {id,overcurrentState};
   nrf24.stopListening();
-  nrf24.openWritingPipe(room1TxPipe);
+  nrf24.openWritingPipe(room2TxPipe);
   nrf24.write(&nodeToMaster,sizeof(nodeToMaster_t));
   nrf24.startListening();   
 }
@@ -60,7 +60,7 @@ void setup()
   pinMode(relayPin,OUTPUT);
   Serial.println("INIT");
   nrf24.begin();
-  nrf24.openReadingPipe(1,room1RxPipe);
+  nrf24.openReadingPipe(1,room2RxPipe);
   nrf24.setPALevel(RF24_PA_MAX);
   nrf24.startListening();
   prevTime = millis();
@@ -72,12 +72,12 @@ void loop()
   static bool overcurrentPrevDetected;
   static float currentLimitFromMem;
   static float measuredCurrent;
-  
+
   if((millis() - prevTime) >= 500)
   {
     measuredCurrent = pzem.current();
-    SetToZeroIfNaN(&measuredCurrent); 
-    prevTime = millis();
+    SetToZeroIfNaN(&measuredCurrent);
+    prevTime = millis(); 
   }
 
   if(nrf24.available())
