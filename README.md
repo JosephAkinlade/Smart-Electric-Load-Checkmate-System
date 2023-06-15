@@ -12,7 +12,7 @@ This project aims to develop an electrical appliance monitoring and control syst
 7. Power restoration control: After necessary punishment or corrective action has been taken, authorized personnel can restore power to the rooms through the web server interface.
 8. Real-time monitoring: The system provides real-time monitoring of current consumption, enabling immediate detection and action against unauthorized appliances.
 
-#Components
+# Components
 1. ESP8266 and Arduino Nano
 2. PZEM-004T Metering Module
 3. NRF24L01 Transceiver
